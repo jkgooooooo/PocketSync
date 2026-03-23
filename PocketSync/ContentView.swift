@@ -20,7 +20,9 @@ struct ContentView: View {
                     Label("홈", systemImage: "list.bullet.rectangle")
                 }
 
-            QuickExpenseView()
+            QuickExpenseView {
+                selectedTab = 0
+            }
                 .tag(1)
                 .tabItem {
                     Label("지출", systemImage: "plus.circle.fill")
@@ -39,5 +41,6 @@ struct ContentView: View {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+            .environmentObject(HouseholdStore.preview)
     }
 }

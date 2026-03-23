@@ -60,6 +60,79 @@ struct FlexibleChipLayout<Content: View>: View {
     }
 }
 
+struct ChipFlowLayout: Layout {
+    var spacing: CGFloat = 10
+    var rowSpacing: CGFloat = 10
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? 0
+        guard maxWidth > 0 else {
+            let widths = subviews.map { $0.sizeThatFits(.unspecified).width }
+            let heights = subviews.map { $0.sizeThatFits(.unspecified).height }
+            return CGSize(
+                width: widths.max() ?? 0,
+                height: heights.reduce(0, +)
+            )
+        }
+
+        var lineWidth: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let itemWidth = min(size.width, maxWidth)
+
+            if lineWidth > 0, lineWidth + spacing + itemWidth > maxWidth {
+                totalHeight += lineHeight + rowSpacing
+                lineWidth = itemWidth
+                lineHeight = size.height
+            } else {
+                lineWidth += (lineWidth > 0 ? spacing : 0) + itemWidth
+                lineHeight = max(lineHeight, size.height)
+            }
+        }
+
+        totalHeight += lineHeight
+
+        return CGSize(width: maxWidth, height: totalHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let itemWidth = min(size.width, bounds.width)
+
+            if x > bounds.minX, x + itemWidth > bounds.maxX {
+                x = bounds.minX
+                y += lineHeight + rowSpacing
+                lineHeight = 0
+            }
+
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: itemWidth, height: size.height)
+            )
+
+            x += itemWidth + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
 struct CategoryChip: View {
     let title: String
     let isSelected: Bool
@@ -72,6 +145,26 @@ struct CategoryChip: View {
             .padding(.vertical, 11)
             .background(isSelected ? PocketSyncTheme.accent : PocketSyncTheme.panel)
             .clipShape(Capsule())
+    }
+}
+
+struct CategoryAddChip: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "plus")
+                .font(.footnote.weight(.bold))
+            Text("추가")
+                .font(.subheadline.weight(.semibold))
+        }
+        .foregroundStyle(PocketSyncTheme.accent)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(PocketSyncTheme.card)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(PocketSyncTheme.accent.opacity(0.25), lineWidth: 1)
+        }
     }
 }
 

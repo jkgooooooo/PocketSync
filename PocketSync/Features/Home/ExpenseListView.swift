@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ExpenseListView: View {
-    let expenses: [ExpenseLog]
+    let expenses: [ExpenseFeedItem]
     let title: String
 
     var body: some View {

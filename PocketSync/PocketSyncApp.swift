@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct PocketSyncApp: App {
+    @StateObject private var householdStore = HouseholdStore.preview
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(householdStore)
         }
     }
 }

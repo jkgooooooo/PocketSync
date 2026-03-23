@@ -207,7 +207,7 @@ struct ExpenseLogRow: View {
 }
 
 struct ExpenseTimelineRow: View {
-    let log: ExpenseLog
+    let log: ExpenseFeedItem
     let isLast: Bool
 
     var body: some View {
@@ -241,32 +241,32 @@ struct ExpenseTimelineRow: View {
             .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(log.memo)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(PocketSyncTheme.ink)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(log.memo)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(PocketSyncTheme.ink)
+                        .lineLimit(1)
 
-                HStack(spacing: 8) {
-                    Text(walletTag)
+                    Text(log.walletTagTitle)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(walletColor)
-
-                    Text(log.category)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                    
+                    Spacer(minLength: 0)
                 }
-                .lineLimit(1)
 
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(log.amount.currency)
                         .font(.title3.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(PocketSyncTheme.ink)
+                }
 
-                    Text(log.owner)
+                HStack(spacing: 8) {
+                    Text(log.categoryTitle)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                    Spacer(minLength: 0)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -276,33 +276,24 @@ struct ExpenseTimelineRow: View {
     }
 
     private var shortTime: String {
-        if log.date.contains("오전") || log.date.contains("오후") {
-            return log.date
+        if log.dateText.contains("오전") || log.dateText.contains("오후") {
+            return log.dateText
                 .replacingOccurrences(of: "오늘 ", with: "")
                 .replacingOccurrences(of: "어제 ", with: "")
         }
 
-        return log.date
-    }
-
-    private var walletTag: String {
-        if log.wallet.contains("공동") {
-            return "#집안일"
-        }
-        if log.wallet.contains("아내") {
-            return "#아내"
-        }
-        return "#남편"
+        return log.dateText
     }
 
     private var walletColor: Color {
-        if log.wallet.contains("공동") {
+        switch log.walletKind {
+        case .shared:
             return PocketSyncTheme.warning
-        }
-        if log.wallet.contains("아내") {
+        case .wifeAllowance:
             return PocketSyncTheme.rose
+        case .husbandAllowance:
+            return PocketSyncTheme.accent
         }
-        return PocketSyncTheme.accent
     }
 }
 

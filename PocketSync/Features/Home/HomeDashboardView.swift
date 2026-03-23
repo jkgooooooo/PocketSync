@@ -8,25 +8,17 @@
 import SwiftUI
 
 struct HomeDashboardView: View {
+    @EnvironmentObject private var householdStore: HouseholdStore
     let onAddExpense: () -> Void
     @State private var selectedFilter: HomeExpenseFilter = .all
 
-    private let recentExpenses = [
-        ExpenseLog(category: "식비", wallet: "공동 생활비", owner: "정근", amount: 42_000, date: "오늘 오후 7:40", memo: "주말 장보기"),
-        ExpenseLog(category: "카페", wallet: "아내 용돈", owner: "캐리", amount: 5_800, date: "오늘 오후 2:10", memo: "스타벅스"),
-        ExpenseLog(category: "구독", wallet: "남편 용돈", owner: "정근", amount: 29_000, date: "어제 오전 9:00", memo: "ChatGPT"),
-        ExpenseLog(category: "교통", wallet: "아내 용돈", owner: "캐리", amount: 18_400, date: "어제 오전 8:35", memo: "택시"),
-        ExpenseLog(category: "생활", wallet: "공동 생활비", owner: "정근", amount: 24_000, date: "3월 21일", memo: "정수기 필터"),
-        ExpenseLog(category: "쇼핑", wallet: "아내 용돈", owner: "캐리", amount: 31_000, date: "3월 19일", memo: "올리브영")
-    ]
-
-    private var filteredExpenses: [ExpenseLog] {
-        recentExpenses.filter { expense in
+    private var filteredExpenses: [ExpenseFeedItem] {
+        householdStore.expenseFeedItems.filter { expense in
             selectedFilter.matches(expense)
         }
     }
 
-    private var previewExpenses: [ExpenseLog] {
+    private var previewExpenses: [ExpenseFeedItem] {
         Array(filteredExpenses.prefix(4))
     }
 
@@ -156,16 +148,16 @@ private enum HomeExpenseFilter: CaseIterable {
         }
     }
 
-    func matches(_ expense: ExpenseLog) -> Bool {
+    func matches(_ expense: ExpenseFeedItem) -> Bool {
         switch self {
         case .all:
             true
         case .shared:
-            expense.wallet.contains("공동")
+            expense.walletKind == .shared
         case .husband:
-            expense.wallet.contains("남편")
+            expense.walletKind == .husbandAllowance
         case .wife:
-            expense.wallet.contains("아내")
+            expense.walletKind == .wifeAllowance
         }
     }
 }
