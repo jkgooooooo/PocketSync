@@ -29,12 +29,12 @@ struct HeroPanel: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PocketSyncTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(PocketSyncTheme.line.opacity(0.3), lineWidth: 1)
+                .stroke(PocketSyncTheme.glassStroke, lineWidth: 1)
         }
+        .shadow(color: PocketSyncTheme.shadow, radius: 20, y: 10)
     }
 }
 
@@ -57,12 +57,12 @@ struct SectionBlock<Content: View>: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PocketSyncTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(PocketSyncTheme.line.opacity(0.3), lineWidth: 1)
+                .stroke(PocketSyncTheme.glassStroke, lineWidth: 1)
         }
+        .shadow(color: PocketSyncTheme.shadow.opacity(0.7), radius: 18, y: 8)
     }
 }
 

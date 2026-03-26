@@ -141,45 +141,96 @@ struct CategoryChip: View {
         Text(title)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(isSelected ? .white : PocketSyncTheme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(isSelected ? PocketSyncTheme.accent : PocketSyncTheme.panel)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 42)
+            .background(isSelected ? PocketSyncTheme.positive : PocketSyncTheme.card.opacity(0.88))
             .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(isSelected ? .clear : PocketSyncTheme.line.opacity(0.18), lineWidth: 1)
+            }
+            .shadow(color: isSelected ? PocketSyncTheme.positive.opacity(0.16) : PocketSyncTheme.shadow.opacity(0.35), radius: 8, y: 4)
     }
 }
 
 struct CategoryAddChip: View {
+    let isExpanded: Bool
+
+    init(isExpanded: Bool = false) {
+        self.isExpanded = isExpanded
+    }
+
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "plus")
+            Image(systemName: isExpanded ? "minus" : "plus")
                 .font(.footnote.weight(.bold))
-            Text("추가")
+            Text(isExpanded ? "닫기" : "추가")
                 .font(.subheadline.weight(.semibold))
         }
         .foregroundStyle(PocketSyncTheme.accent)
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .background(PocketSyncTheme.card)
+        .background(PocketSyncTheme.card.opacity(0.88))
         .clipShape(Capsule())
         .overlay {
             Capsule()
                 .stroke(PocketSyncTheme.accent.opacity(0.25), lineWidth: 1)
         }
+        .shadow(color: PocketSyncTheme.shadow.opacity(0.35), radius: 8, y: 4)
+    }
+}
+
+struct SuggestionChip: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(PocketSyncTheme.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(PocketSyncTheme.card.opacity(0.82))
+            .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(PocketSyncTheme.line.opacity(0.16), lineWidth: 1)
+            }
+            .shadow(color: PocketSyncTheme.shadow.opacity(0.25), radius: 6, y: 3)
     }
 }
 
 struct FilterChip: View {
     let title: String
     let isSelected: Bool
+    let tint: Color
+
+    init(title: String, isSelected: Bool, tint: Color = PocketSyncTheme.accent) {
+        self.title = title
+        self.isSelected = isSelected
+        self.tint = tint
+    }
 
     var body: some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(isSelected ? .white : PocketSyncTheme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .background(isSelected ? PocketSyncTheme.ink : PocketSyncTheme.paper)
-            .clipShape(Capsule())
+        HStack(spacing: 6) {
+            if isSelected {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 6, height: 6)
+            }
+
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+        }
+        .foregroundStyle(isSelected ? tint : PocketSyncTheme.ink)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(isSelected ? PocketSyncTheme.card : PocketSyncTheme.panel)
+        .clipShape(Capsule())
+        .overlay {
+            Capsule()
+                .stroke(isSelected ? tint.opacity(0.28) : PocketSyncTheme.line.opacity(0.10), lineWidth: 1)
+        }
+        .shadow(color: isSelected ? PocketSyncTheme.shadow.opacity(0.08) : .clear, radius: 10, y: 5)
     }
 }
 

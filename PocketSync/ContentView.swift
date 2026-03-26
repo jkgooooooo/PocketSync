@@ -12,12 +12,14 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            HomeDashboardView {
-                selectedTab = 1
-            }
+            HomeDashboardView()
             .tag(0)
                 .tabItem {
-                    Label("홈", systemImage: "list.bullet.rectangle")
+                    VStack(spacing: 4) {
+                        Image(systemName: "list.bullet.rectangle.fill")
+                            .font(.system(size: 24, weight: .semibold))
+                        Text("홈")
+                    }
                 }
 
             QuickExpenseView {
@@ -25,13 +27,21 @@ struct ContentView: View {
             }
                 .tag(1)
                 .tabItem {
-                    Label("지출", systemImage: "plus.circle.fill")
+                    VStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28, weight: .bold))
+                        Text("지출")
+                    }
                 }
 
             RecurringExpenseView()
                 .tag(2)
                 .tabItem {
-                    Label("고정비", systemImage: "calendar.badge.clock")
+                    VStack(spacing: 4) {
+                        Image(systemName: "calendar.badge.clock")
+                            .font(.system(size: 24, weight: .semibold))
+                        Text("고정비")
+                    }
                 }
         }
         .tint(PocketSyncTheme.ink)

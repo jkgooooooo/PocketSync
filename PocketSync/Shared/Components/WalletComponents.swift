@@ -146,6 +146,87 @@ struct WalletChip: View {
     }
 }
 
+struct WalletSelectionCard: View {
+    let title: String
+    let subtitle: String
+    let tint: Color
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(title)
+                    .font(.headline.weight(.bold))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                }
+            }
+
+            Text(subtitle)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(isSelected ? .white.opacity(0.88) : PocketSyncTheme.secondaryText)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(isSelected ? .white : PocketSyncTheme.ink)
+        .padding(18)
+        .frame(width: 170, height: 104, alignment: .leading)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(cardStroke, lineWidth: 1)
+        }
+        .shadow(color: isSelected ? tint.opacity(0.22) : PocketSyncTheme.shadow.opacity(0.3), radius: 12, y: 8)
+        .scaleEffect(isSelected ? 1 : 0.97)
+        .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isSelected)
+    }
+
+    private var cardBackground: some ShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(tint)
+        }
+
+        return AnyShapeStyle(PocketSyncTheme.panel)
+    }
+
+    private var cardStroke: Color {
+        if isSelected {
+            return .clear
+        }
+
+        return PocketSyncTheme.line.opacity(0.14)
+    }
+}
+
+struct WalletSegmentButton: View {
+    let title: String
+    let tint: Color
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(isSelected ? .white : PocketSyncTheme.ink)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
+        }
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .padding(.horizontal, 10)
+        .background(isSelected ? tint : PocketSyncTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(isSelected ? .clear : PocketSyncTheme.line.opacity(0.15), lineWidth: 1)
+        }
+        .shadow(color: isSelected ? tint.opacity(0.18) : .clear, radius: 10, y: 6)
+        .scaleEffect(isSelected ? 1 : 0.98)
+        .animation(.spring(response: 0.22, dampingFraction: 0.86), value: isSelected)
+    }
+}
+
 struct QuickActionButton: View {
     let title: String
     let icon: String

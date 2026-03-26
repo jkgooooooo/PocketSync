@@ -11,14 +11,18 @@ struct ExpenseListView: View {
     let expenses: [ExpenseFeedItem]
     let title: String
 
+    private var sections: [ExpenseFeedSection] {
+        expenses.groupedByDay
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.largeTitle.weight(.bold))
                         .foregroundStyle(PocketSyncTheme.ink)
-                    Text("선택한 조건에 맞는 지출을 모두 확인합니다.")
+                    Text("총 \(expenses.count)개 내역")
                         .font(.subheadline)
                         .foregroundStyle(PocketSyncTheme.secondaryText)
                 }
@@ -27,13 +31,18 @@ struct ExpenseListView: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     if expenses.isEmpty {
-                        Text("표시할 지출이 없습니다.")
-                            .font(.subheadline)
-                            .foregroundStyle(PocketSyncTheme.secondaryText)
+                        ExpenseListEmptyStateView(title: title)
                             .padding(.top, 8)
                     } else {
-                        ForEach(Array(expenses.enumerated()), id: \.element.id) { index, expense in
-                            ExpenseTimelineRow(log: expense, isLast: index == expenses.count - 1)
+                        ForEach(sections) { section in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(section.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                                ExpenseFeedSectionCard(items: section.items)
+                            }
+                            .padding(.bottom, 16)
                         }
                     }
                 }
@@ -44,5 +53,31 @@ struct ExpenseListView: View {
         .background(PocketSyncTheme.screenBackground.ignoresSafeArea())
         .navigationTitle("전체 보기")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct ExpenseListEmptyStateView: View {
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .center, spacing: 8) {
+            Image(systemName: "tray")
+                .font(.title2)
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+            Text("\(title)이 비어 있습니다")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PocketSyncTheme.ink)
+            Text("조건에 맞는 지출이 아직 없습니다.")
+                .font(.footnote)
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .background(PocketSyncTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+        }
     }
 }

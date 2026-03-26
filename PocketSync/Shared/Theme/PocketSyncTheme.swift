@@ -24,5 +24,6 @@ enum PocketSyncTheme {
     static let gold = accent
     static let blush = rose
     static let line = Color(uiColor: .separator)
-    static let shadow = Color.black.opacity(0.04)
+    static let shadow = Color.black.opacity(0.08)
+    static let glassStroke = Color.white.opacity(0.6)
 }

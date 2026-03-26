@@ -43,7 +43,7 @@ struct FixedExpenseRow: View {
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(PocketSyncTheme.ink)
 
-                Text("\(item.amount.currency) · \(item.dateText) · \(item.wallet)")
+                Text("\(item.amount.currency) · 매월 \(item.dueDay)일 · \(item.wallet)")
                     .font(.footnote)
                     .foregroundStyle(PocketSyncTheme.ink.opacity(0.72))
             }
@@ -211,78 +211,74 @@ struct ExpenseTimelineRow: View {
     let isLast: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 0) {
-                Text(shortTime)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(PocketSyncTheme.secondaryText)
-                    .frame(width: 54, alignment: .trailing)
-                    .padding(.top, 2)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
+                avatar
 
-                Spacer(minLength: 0)
-            }
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(log.memo)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(PocketSyncTheme.ink)
+                            .lineLimit(1)
 
-            VStack(spacing: 0) {
-                Circle()
-                    .stroke(walletColor, lineWidth: 3)
-                    .frame(width: 14, height: 14)
-                    .background(
-                        Circle()
-                            .fill(PocketSyncTheme.card)
-                            .frame(width: 8, height: 8)
-                    )
+                        Text(shortTime)
+                            .font(.caption)
+                            .foregroundStyle(PocketSyncTheme.secondaryText)
+                            .lineLimit(1)
 
-                Rectangle()
-                    .fill(walletColor.opacity(isLast ? 0 : 0.45))
-                    .frame(width: 2)
-                    .frame(maxHeight: .infinity)
-                    .padding(.top, 4)
-            }
-            .frame(width: 18)
+                        Spacer(minLength: 0)
+                    }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(log.memo)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(PocketSyncTheme.ink)
-                        .lineLimit(1)
-
-                    Text(log.walletTagTitle)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(walletColor)
-                    
-                    Spacer(minLength: 0)
-                }
-
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(log.amount.currency)
-                        .font(.title3.weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(PocketSyncTheme.ink)
-                }
-
-                HStack(spacing: 8) {
                     Text(log.categoryTitle)
-                        .font(.footnote.weight(.medium))
+                        .font(.footnote)
                         .foregroundStyle(PocketSyncTheme.secondaryText)
-
-                    Spacer(minLength: 0)
                 }
+
+                Spacer(minLength: 10)
+
+                Text(log.amount.currency)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(PocketSyncTheme.ink)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, isLast ? 0 : 18)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
+
+            if !isLast {
+                Divider()
+                    .overlay(PocketSyncTheme.line.opacity(0.10))
+                    .padding(.leading, 58)
+            }
         }
-        .frame(minHeight: 62, alignment: .top)
     }
 
     private var shortTime: String {
-        if log.dateText.contains("오전") || log.dateText.contains("오후") {
-            return log.dateText
-                .replacingOccurrences(of: "오늘 ", with: "")
-                .replacingOccurrences(of: "어제 ", with: "")
-        }
+        Self.timeFormatter.string(from: log.spentAt)
+    }
 
-        return log.dateText
+    private var avatar: some View {
+        ZStack {
+            Circle()
+                .fill(walletColor)
+
+            Text(avatarText)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 34, height: 34)
+        .shadow(color: walletColor.opacity(0.18), radius: 8, y: 4)
+    }
+
+    private var avatarText: String {
+        switch log.walletTagTitle {
+        case "#공동":
+            "공"
+        case "#나":
+            "나"
+        default:
+            "상"
+        }
     }
 
     private var walletColor: Color {
@@ -295,42 +291,163 @@ struct ExpenseTimelineRow: View {
             return PocketSyncTheme.accent
         }
     }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "a h:mm"
+        return formatter
+    }()
+}
+
+struct ExpenseFeedSectionCard: View {
+    let items: [ExpenseFeedItem]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, expense in
+                ExpenseTimelineRow(log: expense, isLast: index == items.count - 1)
+            }
+        }
+        .background(PocketSyncTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: PocketSyncTheme.shadow.opacity(0.05), radius: 12, y: 6)
+    }
 }
 
 struct FixedExpenseManageRow: View {
     let item: FixedExpense
+    private let calendar = Calendar.current
+
+    private var isPaid: Bool {
+        item.status == "완료"
+    }
+
+    private var statusTint: Color {
+        switch paymentState {
+        case .paid:
+            return PocketSyncTheme.moss
+        case .overdue:
+            return .red
+        case .scheduled:
+            return PocketSyncTheme.coral
+        }
+    }
+
+    private var paymentState: PaymentState {
+        if isPaid { return .paid }
+        let today = calendar.component(.day, from: .now)
+        return item.dueDay < today ? .overdue : .scheduled
+    }
+
+    private var dDayText: String? {
+        let today = calendar.component(.day, from: .now)
+        let delta = item.dueDay - today
+
+        if isPaid { return nil }
+        if delta < 0 { return "미납 주의" }
+        if delta == 0 { return "D-Day" }
+        return "D-\(delta)"
+    }
+
+    private var statusText: String {
+        switch paymentState {
+        case .paid:
+            return "완료"
+        case .overdue:
+            return "미납"
+        case .scheduled:
+            return item.status
+        }
+    }
+
+    private var trailingStatusText: String {
+        switch paymentState {
+        case .paid:
+            return "이번 달 반영됨"
+        case .overdue:
+            return "납부일 지남"
+        case .scheduled:
+            return "이번 달 예정"
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(item.name)
-                    .font(.headline)
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 4) {
+                Text("\(item.dueDay)")
+                    .font(.title3.weight(.black))
                     .foregroundStyle(PocketSyncTheme.ink)
-                Spacer()
-                Text(item.status)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(item.status == "완료" ? PocketSyncTheme.moss : PocketSyncTheme.coral)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background((item.status == "완료" ? PocketSyncTheme.moss : PocketSyncTheme.coral).opacity(0.12))
-                    .clipShape(Capsule())
-            }
 
-            HStack {
+                Text("일")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.secondaryText)
+            }
+            .frame(width: 48, height: 58)
+            .background(PocketSyncTheme.panel)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            Circle()
+                .fill(statusTint.opacity(0.12))
+                .frame(width: 42, height: 42)
+                .overlay {
+                    Image(systemName: item.symbol)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(statusTint)
+                }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.name)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.ink)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(item.wallet)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.secondaryText)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    Text(statusText)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(statusTint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(statusTint.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    if let dDayText {
+                        Text(dDayText)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(PocketSyncTheme.coral)
+                    }
+                }
+
+                Text(item.paymentSource)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 4) {
                 Text(item.amount.currency)
-                Spacer()
-                Text(item.dateText)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(PocketSyncTheme.ink)
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(PocketSyncTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-            HStack {
-                Label(item.wallet, systemImage: "tray.full")
-                Spacer()
-                Label("자동 생성", systemImage: "repeat")
+                Text(trailingStatusText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.secondaryText)
+                    .multilineTextAlignment(.trailing)
             }
-            .font(.footnote)
-            .foregroundStyle(PocketSyncTheme.ink.opacity(0.7))
+            .frame(width: 96, alignment: .trailing)
         }
         .padding(18)
         .background(PocketSyncTheme.card)
@@ -339,6 +456,13 @@ struct FixedExpenseManageRow: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(PocketSyncTheme.line, lineWidth: 1)
         }
+        .opacity(isPaid ? 0.62 : 1)
+    }
+
+    private enum PaymentState {
+        case paid
+        case overdue
+        case scheduled
     }
 }
 

@@ -6,19 +6,23 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct QuickExpenseView: View {
     @EnvironmentObject private var householdStore: HouseholdStore
     let onSaveCompleted: (() -> Void)?
 
     @State private var draft = ExpenseEntryDraft()
-    @State private var isCategoryManagementHintPresented = false
+    @State private var amountInput = ""
+    @State private var isCategoryManagementExpanded = false
+    @State private var didAutoScrollToCategory = false
+    @FocusState private var isAmountFieldFocused: Bool
+
+    private let categorySectionID = "expense-category-section"
 
     init(onSaveCompleted: (() -> Void)? = nil) {
         self.onSaveCompleted = onSaveCompleted
     }
-
-    private let keypadValues = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "삭제"]
 
     private var amountText: String {
         max(draft.amount, 0).currency
@@ -37,6 +41,29 @@ struct QuickExpenseView: View {
         ExpenseCategory.entryOrder
     }
 
+    private var suggestedMemos: [String] {
+        guard let category = draft.selectedCategory else { return [] }
+
+        switch category {
+        case .food:
+            return ["장보기", "점심", "저녁", "배달", "간식"]
+        case .transport:
+            return ["택시", "주유", "버스", "지하철", "주차"]
+        case .living:
+            return ["생필품", "정수기", "청소", "집수리", "육아"]
+        case .shopping:
+            return ["쿠팡", "올리브영", "다이소", "옷", "생활용품"]
+        case .cafe:
+            return ["스타벅스", "커피", "디저트", "음료", "간식"]
+        case .subscription:
+            return ["넷플릭스", "유튜브", "ChatGPT", "음악", "멤버십"]
+        case .utility:
+            return ["관리비", "전기", "가스", "수도", "통신비"]
+        case .other:
+            return ["기타", "메모 추가", "비정기", "예외 지출"]
+        }
+    }
+
     private var saveButtonTitle: String {
         guard let wallet = selectedWallet, draft.amount > 0 else {
             return "지출 저장"
@@ -45,130 +72,295 @@ struct QuickExpenseView: View {
         return "\(wallet.kind.title)에서 \(draft.amount.currency) 저장"
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HeroPanel(
-                    eyebrow: "Quick Add",
-                    title: "지출을 바로 넣고\n끝냅니다.",
-                    subtitle: "금액, 주머니, 카테고리만 선택하면 저장됩니다."
-                )
+    private var selectedWalletSubtitle: String {
+        guard let wallet = selectedWallet else {
+            return "주머니를 선택하면 여기서 바로 저장할 수 있습니다."
+        }
 
-                SectionBlock("금액") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(amountText)
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
+        return walletDescription(for: wallet)
+    }
+
+    private var saveButtonTint: Color {
+        if draft.isValid {
+            return PocketSyncTheme.positive
+        }
+
+        if draft.amount > 0 {
+            return PocketSyncTheme.accent
+        }
+
+        return PocketSyncTheme.secondaryText
+    }
+
+    private var amountHelperText: String {
+        if draft.amount > 0 {
+            return draft.amount.koreanCurrencyText
+        }
+
+        return "금액을 입력하세요"
+    }
+
+    private var contextDateText: String {
+        Self.contextDateFormatter.string(from: .now)
+    }
+
+    private var monthSpendText: String {
+        householdStore.expenses
+            .filter { !$0.isDeleted && Calendar.current.isDate($0.spentAt, equalTo: .now, toGranularity: .month) }
+            .reduce(0) { $0 + $1.amount }
+            .currency
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(contextDateText)
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(PocketSyncTheme.ink)
 
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                            ForEach(keypadValues, id: \.self) { key in
-                                Button {
-                                    handleKeypadTap(key)
-                                } label: {
-                                    KeypadKey(title: key)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-
-                SectionBlock("주머니 선택") {
-                    HStack(spacing: 12) {
-                        ForEach(availableWallets) { wallet in
-                            Button {
-                                draft.selectedWalletID = wallet.id
-                            } label: {
-                                WalletChip(
-                                    title: wallet.kind.title,
-                                    tint: tint(for: wallet.kind),
-                                    isSelected: draft.selectedWalletID == wallet.id
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                SectionBlock("카테고리") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ChipFlowLayout(spacing: 10, rowSpacing: 10) {
-                            ForEach(categoryOptions) { category in
-                                Button {
-                                    draft.selectedCategory = category
-                                } label: {
-                                    CategoryChip(
-                                        title: category.title,
-                                        isSelected: draft.selectedCategory == category
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            Button {
-                                isCategoryManagementHintPresented = true
-                            } label: {
-                                CategoryAddChip()
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        Text("나중에 사용자 카테고리를 추가하거나 삭제할 수 있게 확장할 자리입니다.")
+                        Text("이번 달 지출 \(monthSpendText)")
                             .font(.footnote)
                             .foregroundStyle(PocketSyncTheme.secondaryText)
                     }
-                }
+                    .padding(.horizontal, 4)
 
-                SectionBlock("메모") {
-                    TextField("예: 스타벅스, 장보기, 택시", text: $draft.memo)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(PocketSyncTheme.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(PocketSyncTheme.line, lineWidth: 1)
+                    SectionBlock("금액") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            ZStack(alignment: .leading) {
+                                if amountInput.isEmpty {
+                                    Text("0")
+                                        .font(.system(size: 60, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                                }
+
+                                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                    TextField("", text: $amountInput)
+                                        .keyboardType(.numberPad)
+                                        .textInputAutocapitalization(.never)
+                                        .focused($isAmountFieldFocused)
+                                        .font(.system(size: amountInput.isEmpty ? 56 : 60, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(PocketSyncTheme.ink)
+
+                                    Text("원")
+                                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                                }
+                            }
+                            .frame(minHeight: 108)
+                            .padding(.horizontal, 20)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .stroke(PocketSyncTheme.glassStroke, lineWidth: 1)
+                            }
+                            .shadow(color: PocketSyncTheme.shadow.opacity(0.55), radius: 14, y: 7)
+                            .animation(.spring(response: 0.22, dampingFraction: 0.84), value: amountInput.isEmpty)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(amountHelperText)
+                                    .font(.footnote)
+                                    .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                                if draft.amount > 0 {
+                                    Text("카테고리를 고르면 바로 저장할 수 있습니다.")
+                                        .font(.caption)
+                                        .foregroundStyle(PocketSyncTheme.tertiaryText)
+                                }
+                            }
                         }
-                }
+                    }
 
-                Button {
-                    saveExpense()
-                } label: {
-                    Text(saveButtonTitle)
-                        .font(.headline)
+                    SectionBlock("카테고리") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ChipFlowLayout(spacing: 8, rowSpacing: 12) {
+                                ForEach(categoryOptions) { category in
+                                    Button {
+                                        draft.selectedCategory = category
+                                        applySuggestedMemoIfNeeded(for: category)
+                                        triggerSelectionHaptic()
+                                    } label: {
+                                        CategoryChip(
+                                            title: category.title,
+                                            isSelected: draft.selectedCategory == category
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                Button {
+                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                                        isCategoryManagementExpanded.toggle()
+                                    }
+                                    triggerSelectionHaptic()
+                                } label: {
+                                    CategoryAddChip(isExpanded: isCategoryManagementExpanded)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if isCategoryManagementExpanded {
+                                HStack(alignment: .top, spacing: 12) {
+                                    Image(systemName: "sparkles.rectangle.stack")
+                                        .font(.headline)
+                                        .foregroundStyle(PocketSyncTheme.accent)
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("카테고리 관리 준비")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(PocketSyncTheme.ink)
+
+                                        Text("다음 단계에서 여기서 바로 사용자 카테고리를 추가하고 삭제할 수 있게 연결할 예정입니다.")
+                                            .font(.footnote)
+                                            .foregroundStyle(PocketSyncTheme.secondaryText)
+                                    }
+                                }
+                                .padding(14)
+                                .background(PocketSyncTheme.card.opacity(0.84))
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+                                }
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                            }
+                        }
+                    }
+                    .id(categorySectionID)
+
+                    SectionBlock("주머니와 메모") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack(spacing: 10) {
+                                ForEach(availableWallets) { wallet in
+                                    Button {
+                                        draft.selectedWalletID = wallet.id
+                                        triggerSelectionHaptic()
+                                    } label: {
+                                        WalletSegmentButton(
+                                            title: wallet.kind.title,
+                                            tint: tint(for: wallet.kind),
+                                            isSelected: draft.selectedWalletID == wallet.id
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            Text(selectedWalletSubtitle)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(spacing: 10) {
+                                    TextField("예: 스타벅스, 장보기, 택시", text: $draft.memo)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .font(.body)
+
+                                    Image(systemName: "mic.fill")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                                        .padding(8)
+                                        .background(PocketSyncTheme.panel, in: Circle())
+                                }
+                                .padding(.horizontal, 16)
+                                .frame(minHeight: 56)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(PocketSyncTheme.glassStroke, lineWidth: 1)
+                                }
+                                .shadow(color: PocketSyncTheme.shadow.opacity(0.42), radius: 12, y: 6)
+
+                                if !suggestedMemos.isEmpty {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Text("빠른 메모")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                                        ChipFlowLayout(spacing: 8, rowSpacing: 8) {
+                                            ForEach(suggestedMemos, id: \.self) { suggestion in
+                                                Button {
+                                                    draft.memo = suggestion
+                                                    triggerSelectionHaptic()
+                                                } label: {
+                                                    SuggestionChip(title: suggestion)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Button {
+                        saveExpense()
+                    } label: {
+                        HStack {
+                            Text(saveButtonTitle)
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3.weight(.bold))
+                        }
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(draft.isValid ? PocketSyncTheme.accent : PocketSyncTheme.secondaryText)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                        .padding(.horizontal, 20)
+                        .background(saveButtonTint)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(
+                            color: draft.amount > 0 ? saveButtonTint.opacity(draft.isValid ? 0.28 : 0.18) : .clear,
+                            radius: 18,
+                            y: 10
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!draft.isValid)
                 }
-                .buttonStyle(.plain)
-                .disabled(!draft.isValid)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 20)
             }
-            .padding(20)
+            .onChange(of: draft.amount) { oldValue, newValue in
+                guard oldValue == 0, newValue > 0, !didAutoScrollToCategory else { return }
+                didAutoScrollToCategory = true
+
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                    proxy.scrollTo(categorySectionID, anchor: .top)
+                }
+            }
         }
         .background(PocketSyncTheme.screenBackground.ignoresSafeArea())
         .onAppear {
             if draft.selectedWalletID == nil {
                 draft.selectedWalletID = householdStore.activeWallets.first?.id
             }
+            amountInput = formattedAmountInput(from: draft.rawAmount)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                isAmountFieldFocused = true
+            }
         }
-        .alert("카테고리 관리", isPresented: $isCategoryManagementHintPresented) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text("다음 단계에서 사용자 카테고리 추가/삭제 기능을 붙일 예정입니다.")
-        }
-    }
+        .onChange(of: amountInput) { _, newValue in
+            let digits = newValue.filter(\.isNumber)
+            draft.rawAmount = digits
 
-    private func handleKeypadTap(_ key: String) {
-        if key == "삭제" {
-            draft.deleteLastDigit()
-            return
+            let formatted = formattedAmountInput(from: digits)
+            if formatted != newValue {
+                amountInput = formatted
+            }
         }
-
-        draft.appendAmount(key)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("완료") {
+                    isAmountFieldFocused = false
+                }
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.86), value: draft.selectedCategory)
     }
 
     private func saveExpense() {
@@ -188,6 +380,9 @@ struct QuickExpenseView: View {
         )
 
         draft.reset(defaultWalletID: householdStore.activeWallets.first?.id)
+        didAutoScrollToCategory = false
+        amountInput = ""
+        triggerSuccessHaptic()
         onSaveCompleted?()
     }
 
@@ -201,4 +396,70 @@ struct QuickExpenseView: View {
             PocketSyncTheme.rose
         }
     }
+
+    private func formattedAmountInput(from rawValue: String) -> String {
+        guard let amount = Int(rawValue), amount > 0 else {
+            return rawValue
+        }
+
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: amount)) ?? rawValue
+    }
+
+    private func triggerSelectionHaptic() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.selectionChanged()
+    }
+
+    private func triggerSuccessHaptic() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
+    private func walletDescription(for wallet: Wallet) -> String {
+        switch wallet.kind {
+        case .shared:
+            return "둘이 함께 보는 공동 생활비"
+        case .husbandAllowance:
+            return "내 개인 지출일 때 선택"
+        case .wifeAllowance:
+            return "상대방 개인 지출일 때 선택"
+        }
+    }
+
+    private func applySuggestedMemoIfNeeded(for category: ExpenseCategory) {
+        let trimmedMemo = draft.memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedMemo.isEmpty else { return }
+
+        draft.memo = suggestionSeed(for: category)
+    }
+
+    private func suggestionSeed(for category: ExpenseCategory) -> String {
+        switch category {
+        case .food:
+            return "장보기"
+        case .transport:
+            return "택시"
+        case .living:
+            return "생필품"
+        case .shopping:
+            return "쿠팡"
+        case .cafe:
+            return "스타벅스"
+        case .subscription:
+            return "넷플릭스"
+        case .utility:
+            return "관리비"
+        case .other:
+            return "기타"
+        }
+    }
+
+    private static let contextDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "M월 d일 EEEE"
+        return formatter
+    }()
 }

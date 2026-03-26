@@ -27,8 +27,10 @@ struct FixedExpense: Identifiable {
     let id = UUID()
     let name: String
     let amount: Int
-    let dateText: String
+    let symbol: String
+    let dueDay: Int
     let wallet: String
+    let paymentSource: String
     let status: String
 }
 
