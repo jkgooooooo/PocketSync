@@ -8,8 +8,12 @@
 import SwiftUI
 
 struct ExpenseListView: View {
+    @EnvironmentObject private var householdStore: HouseholdStore
+
     let expenses: [ExpenseFeedItem]
     let title: String
+
+    @State private var selectedExpense: ExpenseFeedItem?
 
     private var sections: [ExpenseFeedSection] {
         expenses.groupedByDay
@@ -40,7 +44,9 @@ struct ExpenseListView: View {
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(PocketSyncTheme.secondaryText)
 
-                                ExpenseFeedSectionCard(items: section.items)
+                                ExpenseFeedSectionCard(items: section.items) { expense in
+                                    selectedExpense = expense
+                                }
                             }
                             .padding(.bottom, 16)
                         }
@@ -53,6 +59,11 @@ struct ExpenseListView: View {
         .background(PocketSyncTheme.screenBackground.ignoresSafeArea())
         .navigationTitle("전체 보기")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selectedExpense) { expense in
+            if let editableExpense = householdStore.expense(for: expense.id) {
+                EditExpenseView(expense: editableExpense)
+            }
+        }
     }
 }
 

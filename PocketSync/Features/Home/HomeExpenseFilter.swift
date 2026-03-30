@@ -10,8 +10,7 @@ import SwiftUI
 enum HomeExpenseFilter: CaseIterable {
     case all
     case shared
-    case husband
-    case wife
+    case mine
 
     var title: String {
         switch self {
@@ -19,10 +18,8 @@ enum HomeExpenseFilter: CaseIterable {
             "전체"
         case .shared:
             "공동"
-        case .husband:
-            "남편"
-        case .wife:
-            "아내"
+        case .mine:
+            "내 지출"
         }
     }
 
@@ -32,10 +29,8 @@ enum HomeExpenseFilter: CaseIterable {
             "전체 지출내역"
         case .shared:
             "공동 생활비"
-        case .husband:
-            "남편 지출내역"
-        case .wife:
-            "아내 지출내역"
+        case .mine:
+            "내 지출내역"
         }
     }
 
@@ -45,10 +40,8 @@ enum HomeExpenseFilter: CaseIterable {
             PocketSyncTheme.accent
         case .shared:
             PocketSyncTheme.warning
-        case .husband:
+        case .mine:
             PocketSyncTheme.accent
-        case .wife:
-            PocketSyncTheme.rose
         }
     }
 
@@ -58,10 +51,8 @@ enum HomeExpenseFilter: CaseIterable {
             true
         case .shared:
             expense.walletKind == .shared
-        case .husband:
-            expense.walletKind == .husbandAllowance
-        case .wife:
-            expense.walletKind == .wifeAllowance
+        case .mine:
+            expense.walletKind != .shared
         }
     }
 }

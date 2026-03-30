@@ -15,19 +15,25 @@ final class HouseholdStore: ObservableObject {
     @Published var users: [UserProfile]
     @Published var wallets: [Wallet]
     @Published var expenses: [Expense]
+    @Published var customCategories: [ExpenseCategory]
+    @Published var isSignedIn: Bool
 
     init(
         household: Household,
         currentUserID: UUID,
         users: [UserProfile],
         wallets: [Wallet],
-        expenses: [Expense]
+        expenses: [Expense],
+        customCategories: [ExpenseCategory] = [],
+        isSignedIn: Bool = false
     ) {
         self.household = household
         self.currentUserID = currentUserID
         self.users = users
         self.wallets = wallets
         self.expenses = expenses
+        self.customCategories = customCategories
+        self.isSignedIn = isSignedIn
     }
 
     var currentUser: UserProfile? {
@@ -35,16 +41,33 @@ final class HouseholdStore: ObservableObject {
     }
 
     var activeWallets: [Wallet] {
-        wallets
+        accessibleWallets
             .filter(\.isActive)
             .sorted { lhs, rhs in
                 lhs.kind.sortOrder < rhs.kind.sortOrder
             }
     }
 
+    var availableCategories: [ExpenseCategory] {
+        ExpenseCategory.defaultCategories + customCategories.sorted { lhs, rhs in
+            if lhs.group == rhs.group {
+                return lhs.title.localizedCompare(rhs.title) == .orderedAscending
+            }
+
+            return lhs.group.rawValue < rhs.group.rawValue
+        }
+    }
+
+    var visibleExpenses: [Expense] {
+        expenses.filter { expense in
+            guard !expense.isDeleted else { return false }
+            guard let wallet = wallet(for: expense.walletID) else { return false }
+            return canAccess(wallet: wallet)
+        }
+    }
+
     var expenseFeedItems: [ExpenseFeedItem] {
-        expenses
-            .filter { !$0.isDeleted }
+        visibleExpenses
             .sorted { $0.spentAt > $1.spentAt }
             .compactMap { expense in
                 guard
@@ -57,6 +80,7 @@ final class HouseholdStore: ObservableObject {
                 return ExpenseFeedItem(
                     id: expense.id,
                     memo: expense.memo,
+                    categoryGroupTitle: expense.category.groupTitle,
                     categoryTitle: expense.category.title,
                     walletTitle: wallet.kind.title,
                     walletTagTitle: walletTagTitle(for: wallet),
@@ -69,8 +93,17 @@ final class HouseholdStore: ObservableObject {
             }
     }
 
+    private var accessibleWallets: [Wallet] {
+        wallets
+            .filter(canAccess(wallet:))
+    }
+
     func wallet(for id: UUID) -> Wallet? {
         wallets.first { $0.id == id }
+    }
+
+    func expense(for id: UUID) -> Expense? {
+        visibleExpenses.first { $0.id == id }
     }
 
     func user(for id: UUID) -> UserProfile? {
@@ -87,6 +120,26 @@ final class HouseholdStore: ObservableObject {
         }
 
         return "#상대방"
+    }
+
+    private func canAccess(wallet: Wallet) -> Bool {
+        if wallet.kind == .shared {
+            return true
+        }
+
+        return wallet.ownerUserID == currentUserID
+    }
+
+    private func canModify(expense: Expense) -> Bool {
+        guard let wallet = wallet(for: expense.walletID) else {
+            return false
+        }
+
+        guard canAccess(wallet: wallet) else {
+            return false
+        }
+
+        return expense.createdByUserID == currentUserID || wallet.kind == .shared
     }
 
     func addExpense(
@@ -108,6 +161,79 @@ final class HouseholdStore: ObservableObject {
         )
 
         expenses.insert(expense, at: 0)
+    }
+
+    @discardableResult
+    func updateExpense(
+        id: UUID,
+        amount: Int,
+        category: ExpenseCategory,
+        memo: String,
+        walletID: UUID,
+        spentAt: Date
+    ) -> Bool {
+        guard let index = expenses.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        let existingExpense = expenses[index]
+        guard canModify(expense: existingExpense) else {
+            return false
+        }
+
+        guard amount > 0, let targetWallet = wallet(for: walletID), canAccess(wallet: targetWallet) else {
+            return false
+        }
+
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        expenses[index] = Expense(
+            id: existingExpense.id,
+            householdID: existingExpense.householdID,
+            walletID: walletID,
+            amount: amount,
+            category: category,
+            memo: trimmedMemo.isEmpty ? category.title : trimmedMemo,
+            spentAt: spentAt,
+            createdByUserID: existingExpense.createdByUserID,
+            updatedAt: .now,
+            syncState: .pending,
+            isDeleted: false
+        )
+        return true
+    }
+
+    @discardableResult
+    func deleteExpense(id: UUID) -> Bool {
+        guard let index = expenses.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+
+        guard canModify(expense: expenses[index]) else {
+            return false
+        }
+
+        expenses[index].updatedAt = .now
+        expenses[index].syncState = .pending
+        expenses[index].isDeleted = true
+        return true
+    }
+
+    @discardableResult
+    func addCustomCategory(title: String, group: ExpenseCategoryGroup) -> ExpenseCategory? {
+        guard isSignedIn else { return nil }
+
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return nil }
+
+        if let existing = availableCategories.first(where: {
+            $0.group == group && $0.title.compare(trimmedTitle, options: .caseInsensitive) == .orderedSame
+        }) {
+            return existing
+        }
+
+        let category = ExpenseCategory.custom(title: trimmedTitle, group: group)
+        customCategories.append(category)
+        return category
     }
 }
 
@@ -162,18 +288,18 @@ extension HouseholdStore {
             Expense(
                 householdID: household.id,
                 walletID: wifeWallet.id,
-                amount: 5_800,
-                category: .cafe,
-                memo: "스타벅스",
+                amount: 65_000,
+                category: .phoneBill,
+                memo: "통신비 자동결제",
                 spentAt: date(hour: 14, minute: 10),
                 createdByUserID: wife.id
             ),
             Expense(
                 householdID: household.id,
                 walletID: husbandWallet.id,
-                amount: 29_000,
-                category: .subscription,
-                memo: "ChatGPT",
+                amount: 18_000,
+                category: .food,
+                memo: "점심",
                 spentAt: date(daysAgo: 1, hour: 9, minute: 0),
                 createdByUserID: husband.id
             ),
@@ -189,18 +315,18 @@ extension HouseholdStore {
             Expense(
                 householdID: household.id,
                 walletID: sharedWallet.id,
-                amount: 24_000,
-                category: .living,
-                memo: "정수기 필터",
+                amount: 230_000,
+                category: .maintenance,
+                memo: "관리비",
                 spentAt: date(daysAgo: 2, hour: 12, minute: 0),
                 createdByUserID: husband.id
             ),
             Expense(
                 householdID: household.id,
                 walletID: wifeWallet.id,
-                amount: 31_000,
-                category: .shopping,
-                memo: "올리브영",
+                amount: 12_000,
+                category: .leisure,
+                memo: "간식",
                 spentAt: date(daysAgo: 4, hour: 18, minute: 15),
                 createdByUserID: wife.id
             )
@@ -211,7 +337,9 @@ extension HouseholdStore {
             currentUserID: husband.id,
             users: [husband, wife],
             wallets: [sharedWallet, husbandWallet, wifeWallet],
-            expenses: expenses
+            expenses: expenses,
+            customCategories: [],
+            isSignedIn: false
         )
     }()
 }

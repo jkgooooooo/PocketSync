@@ -209,6 +209,7 @@ struct ExpenseLogRow: View {
 struct ExpenseTimelineRow: View {
     let log: ExpenseFeedItem
     let isLast: Bool
+    let showsDisclosureIndicator: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -241,9 +242,16 @@ struct ExpenseTimelineRow: View {
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(PocketSyncTheme.ink)
+
+                if showsDisclosureIndicator {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 15)
+            .contentShape(Rectangle())
 
             if !isLast {
                 Divider()
@@ -302,11 +310,29 @@ struct ExpenseTimelineRow: View {
 
 struct ExpenseFeedSectionCard: View {
     let items: [ExpenseFeedItem]
+    var onSelect: ((ExpenseFeedItem) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, expense in
-                ExpenseTimelineRow(log: expense, isLast: index == items.count - 1)
+                if let onSelect {
+                    Button {
+                        onSelect(expense)
+                    } label: {
+                        ExpenseTimelineRow(
+                            log: expense,
+                            isLast: index == items.count - 1,
+                            showsDisclosureIndicator: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    ExpenseTimelineRow(
+                        log: expense,
+                        isLast: index == items.count - 1,
+                        showsDisclosureIndicator: false
+                    )
+                }
             }
         }
         .background(PocketSyncTheme.card)

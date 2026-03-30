@@ -15,7 +15,9 @@ struct QuickExpenseView: View {
     @State private var draft = ExpenseEntryDraft()
     @State private var amountInput = ""
     @State private var isCategoryManagementExpanded = false
+    @State private var customCategoryTitle = ""
     @State private var didAutoScrollToCategory = false
+    @State private var isLoginRequiredAlertPresented = false
     @FocusState private var isAmountFieldFocused: Bool
 
     private let categorySectionID = "expense-category-section"
@@ -38,30 +40,25 @@ struct QuickExpenseView: View {
     }
 
     private var categoryOptions: [ExpenseCategory] {
-        ExpenseCategory.entryOrder
+        householdStore.availableCategories
     }
 
     private var suggestedMemos: [String] {
-        guard let category = draft.selectedCategory else { return [] }
+        draft.selectedCategory?.suggestedMemos ?? []
+    }
 
-        switch category {
-        case .food:
-            return ["장보기", "점심", "저녁", "배달", "간식"]
-        case .transport:
-            return ["택시", "주유", "버스", "지하철", "주차"]
-        case .living:
-            return ["생필품", "정수기", "청소", "집수리", "육아"]
-        case .shopping:
-            return ["쿠팡", "올리브영", "다이소", "옷", "생활용품"]
-        case .cafe:
-            return ["스타벅스", "커피", "디저트", "음료", "간식"]
-        case .subscription:
-            return ["넷플릭스", "유튜브", "ChatGPT", "음악", "멤버십"]
-        case .utility:
-            return ["관리비", "전기", "가스", "수도", "통신비"]
-        case .other:
-            return ["기타", "메모 추가", "비정기", "예외 지출"]
+    private var trimmedCustomCategoryTitle: String {
+        customCategoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var customCategoryAlreadyExists: Bool {
+        categoryOptions.contains {
+            $0.title.compare(trimmedCustomCategoryTitle, options: .caseInsensitive) == .orderedSame
         }
+    }
+
+    private var canAddCustomCategory: Bool {
+        !trimmedCustomCategoryTitle.isEmpty && !customCategoryAlreadyExists
     }
 
     private var saveButtonTitle: String {
@@ -104,9 +101,17 @@ struct QuickExpenseView: View {
         Self.contextDateFormatter.string(from: .now)
     }
 
+    private var selectedSpendDateText: String {
+        Self.selectedDateFormatter.string(from: draft.spentAt)
+    }
+
+    private var selectedSpendTimeText: String {
+        Self.selectedTimeFormatter.string(from: draft.spentAt)
+    }
+
     private var monthSpendText: String {
-        householdStore.expenses
-            .filter { !$0.isDeleted && Calendar.current.isDate($0.spentAt, equalTo: .now, toGranularity: .month) }
+        householdStore.visibleExpenses
+            .filter { Calendar.current.isDate($0.spentAt, equalTo: .now, toGranularity: .month) }
             .reduce(0) { $0 + $1.amount }
             .currency
     }
@@ -173,6 +178,50 @@ struct QuickExpenseView: View {
                         }
                     }
 
+                    SectionBlock("날짜") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("선택한 날짜")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                                    Text(selectedSpendDateText)
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.ink)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("시간")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                                    Text(selectedSpendTimeText)
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.ink)
+                                }
+                            }
+
+                            DatePicker(
+                                "지출 날짜",
+                                selection: $draft.spentAt,
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            DatePicker(
+                                "지출 시간",
+                                selection: $draft.spentAt,
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+
                     SectionBlock("카테고리") {
                         VStack(alignment: .leading, spacing: 14) {
                             ChipFlowLayout(spacing: 8, rowSpacing: 12) {
@@ -189,33 +238,94 @@ struct QuickExpenseView: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
-
-                                Button {
-                                    withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
-                                        isCategoryManagementExpanded.toggle()
-                                    }
-                                    triggerSelectionHaptic()
-                                } label: {
-                                    CategoryAddChip(isExpanded: isCategoryManagementExpanded)
-                                }
-                                .buttonStyle(.plain)
                             }
 
-                            if isCategoryManagementExpanded {
+                            Button {
+                                guard householdStore.isSignedIn else {
+                                    isLoginRequiredAlertPresented = true
+                                    triggerSelectionHaptic()
+                                    return
+                                }
+
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                                    isCategoryManagementExpanded.toggle()
+                                }
+                                triggerSelectionHaptic()
+                            } label: {
+                                CategoryAddChip(isExpanded: isCategoryManagementExpanded)
+                            }
+                            .buttonStyle(.plain)
+
+                            if !householdStore.isSignedIn {
                                 HStack(alignment: .top, spacing: 12) {
-                                    Image(systemName: "sparkles.rectangle.stack")
+                                    Image(systemName: "lock.circle")
                                         .font(.headline)
                                         .foregroundStyle(PocketSyncTheme.accent)
 
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text("카테고리 관리 준비")
+                                        Text("카테고리 추가는 로그인 후 사용할 수 있습니다")
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundStyle(PocketSyncTheme.ink)
 
-                                        Text("다음 단계에서 여기서 바로 사용자 카테고리를 추가하고 삭제할 수 있게 연결할 예정입니다.")
+                                        Text("내 카테고리를 저장하고 다른 기기에서도 이어서 쓰려면 로그인이 필요합니다.")
                                             .font(.footnote)
                                             .foregroundStyle(PocketSyncTheme.secondaryText)
                                     }
+                                }
+                                .padding(14)
+                                .background(PocketSyncTheme.card.opacity(0.84))
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+                                }
+                            }
+
+                            if householdStore.isSignedIn, isCategoryManagementExpanded {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    Text("카테고리 추가")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(PocketSyncTheme.ink)
+
+                                    TextField("예: 반려동물, 보험, 경조사", text: $customCategoryTitle)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .font(.body)
+                                        .padding(.horizontal, 16)
+                                        .frame(minHeight: 50)
+                                        .background(PocketSyncTheme.card.opacity(0.84), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+                                        }
+
+                                    if customCategoryAlreadyExists {
+                                        Text("같은 이름의 카테고리가 이미 있습니다.")
+                                            .font(.caption)
+                                            .foregroundStyle(PocketSyncTheme.coral)
+                                    } else {
+                                        Text("자주 쓰는 항목이 없으면 원하는 이름으로 추가해서 바로 선택할 수 있습니다.")
+                                            .font(.caption)
+                                            .foregroundStyle(PocketSyncTheme.secondaryText)
+                                    }
+
+                                    Button {
+                                        addCustomCategory()
+                                    } label: {
+                                        HStack {
+                                            Text("카테고리 추가")
+                                                .font(.subheadline.weight(.semibold))
+                                            Spacer()
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.subheadline.weight(.bold))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 12)
+                                        .background(canAddCustomCategory ? PocketSyncTheme.accent : PocketSyncTheme.secondaryText, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!canAddCustomCategory)
                                 }
                                 .padding(14)
                                 .background(PocketSyncTheme.card.opacity(0.84))
@@ -360,6 +470,11 @@ struct QuickExpenseView: View {
                 }
             }
         }
+        .alert("로그인 후 사용할 수 있어요", isPresented: $isLoginRequiredAlertPresented) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text("카테고리 추가, 저장, 동기화는 로그인 이후에 열어두겠습니다.")
+        }
         .animation(.spring(response: 0.3, dampingFraction: 0.86), value: draft.selectedCategory)
     }
 
@@ -376,7 +491,8 @@ struct QuickExpenseView: View {
             amount: draft.amount,
             category: category,
             memo: draft.memo,
-            walletID: walletID
+            walletID: walletID,
+            spentAt: draft.spentAt
         )
 
         draft.reset(defaultWalletID: householdStore.activeWallets.first?.id)
@@ -420,11 +536,11 @@ struct QuickExpenseView: View {
     private func walletDescription(for wallet: Wallet) -> String {
         switch wallet.kind {
         case .shared:
-            return "둘이 함께 보는 공동 생활비"
+            return "둘이 함께 사용 하는 공동 생활비"
         case .husbandAllowance:
-            return "내 개인 지출일 때 선택"
+            return "개인 지출일 때 선택"
         case .wifeAllowance:
-            return "상대방 개인 지출일 때 선택"
+            return "공유를 켜면 나중에 상대방에게도 보여줄 수 있습니다"
         }
     }
 
@@ -432,34 +548,38 @@ struct QuickExpenseView: View {
         let trimmedMemo = draft.memo.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedMemo.isEmpty else { return }
 
-        draft.memo = suggestionSeed(for: category)
+        draft.memo = category.suggestionSeed
     }
 
-    private func suggestionSeed(for category: ExpenseCategory) -> String {
-        switch category {
-        case .food:
-            return "장보기"
-        case .transport:
-            return "택시"
-        case .living:
-            return "생필품"
-        case .shopping:
-            return "쿠팡"
-        case .cafe:
-            return "스타벅스"
-        case .subscription:
-            return "넷플릭스"
-        case .utility:
-            return "관리비"
-        case .other:
-            return "기타"
+    private func addCustomCategory() {
+        guard let category = householdStore.addCustomCategory(title: trimmedCustomCategoryTitle, group: .living) else {
+            return
         }
+
+        customCategoryTitle = ""
+        draft.selectedCategory = category
+        applySuggestedMemoIfNeeded(for: category)
+        triggerSelectionHaptic()
     }
 
     private static let contextDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ko_KR")
         formatter.dateFormat = "M월 d일 EEEE"
+        return formatter
+    }()
+
+    private static let selectedDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "yyyy년 M월 d일"
+        return formatter
+    }()
+
+    private static let selectedTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ko_KR")
+        formatter.dateFormat = "a h:mm"
         return formatter
     }()
 }

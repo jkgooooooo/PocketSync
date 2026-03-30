@@ -10,6 +10,7 @@ import Foundation
 struct ExpenseFeedItem: Identifiable, Hashable {
     let id: UUID
     let memo: String
+    let categoryGroupTitle: String
     let categoryTitle: String
     let walletTitle: String
     let walletTagTitle: String

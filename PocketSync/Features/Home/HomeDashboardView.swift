@@ -17,6 +17,7 @@ struct HomeDashboardView: View {
     @State private var isCalendarExpanded = false
     @State private var isMonthPickerPresented = false
     @State private var isCalendarTransitioning = false
+    @State private var selectedExpense: ExpenseFeedItem?
 
     private var calendar: Calendar {
         Calendar.current
@@ -28,42 +29,62 @@ struct HomeDashboardView: View {
         }
     }
 
-    private var selectedDateExpenses: [ExpenseFeedItem] {
+    private var displayedMonthExpenses: [ExpenseFeedItem] {
         filteredExpenses.filter { expense in
-            calendar.isDate(expense.spentAt, inSameDayAs: selectedDate)
+            calendar.isDate(expense.spentAt, equalTo: displayedMonth, toGranularity: .month)
         }
     }
 
-    private var previewExpenses: [ExpenseFeedItem] {
-        Array(selectedDateExpenses.prefix(4))
+    private var recentExpenses: [ExpenseFeedItem] {
+        Array(displayedMonthExpenses.prefix(5))
     }
 
-    private var previewSections: [ExpenseFeedSection] {
-        previewExpenses.groupedByDay
+    private var recentExpenseSections: [ExpenseFeedSection] {
+        recentExpenses.groupedByDay
     }
 
-    private var selectedDateTitle: String {
-        HomeCalendarSupport.selectedDateTitle(for: selectedDate, calendar: calendar)
+    private var monthSpend: Int {
+        displayedMonthExpenses.reduce(0) { $0 + $1.amount }
     }
 
-    private var selectedDateSpendText: String {
-        selectedDateExpenses.reduce(0) { $0 + $1.amount }.currency
+    private var monthExpenseCount: Int {
+        displayedMonthExpenses.count
     }
 
-    private var visibleCountText: String {
-        if selectedDateExpenses.isEmpty {
-            return "\(selectedDateTitle) 지출이 없습니다"
+    private var monthContextTitle: String {
+        if calendar.isDate(displayedMonth, equalTo: .now, toGranularity: .month) {
+            return "이번 달"
         }
 
-        let visibleCount = previewExpenses.count
-        let totalCount = selectedDateExpenses.count
-        let baseText = "\(selectedDateTitle) \(totalCount)건 · \(selectedDateSpendText)"
+        return HomeCalendarSupport.monthDisplayTitle(for: displayedMonth)
+    }
 
-        if totalCount > visibleCount {
-            return "\(baseText) · 최근 \(visibleCount)개만 먼저 보여줍니다"
+    private var monthOverviewText: String {
+        if monthExpenseCount == 0 {
+            return "\(monthContextTitle) 등록된 지출이 없습니다"
         }
 
-        return baseText
+        return "\(monthContextTitle) \(monthExpenseCount)건 기록"
+    }
+
+    private var monthlyCategorySummaries: [MonthlyCategorySummary] {
+        let grouped = Dictionary(grouping: displayedMonthExpenses, by: \.categoryTitle)
+
+        return grouped
+            .map { categoryTitle, items in
+                MonthlyCategorySummary(
+                    categoryTitle: categoryTitle,
+                    amount: items.reduce(0) { $0 + $1.amount },
+                    count: items.count
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.amount == rhs.amount {
+                    return lhs.categoryTitle < rhs.categoryTitle
+                }
+
+                return lhs.amount > rhs.amount
+            }
     }
 
     private var weekDates: [Date] {
@@ -160,7 +181,7 @@ struct HomeDashboardView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(visibleCountText)
+                            Text(monthOverviewText)
                                 .font(.subheadline)
                                 .foregroundStyle(PocketSyncTheme.secondaryText)
                         }
@@ -220,64 +241,86 @@ struct HomeDashboardView: View {
                     }
                     .padding(.top, -8)
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        if previewExpenses.isEmpty {
-                            EmptyExpenseStateView(filterTitle: selectedFilter.title)
-                        } else {
-                            ForEach(previewSections) { section in
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text(section.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                    MonthSpendCard(
+                        title: "\(monthContextTitle) 총 지출",
+                        amountText: monthSpend.currency,
+                        countText: monthExpenseCount == 0 ? "등록된 지출 없음" : "총 \(monthExpenseCount)건"
+                    )
+                    .padding(.horizontal, 20)
 
-                                    ExpenseFeedSectionCard(items: section.items)
+                    HomeSectionCard(
+                        title: "최근 지출내역",
+                        trailing: {
+                            if displayedMonthExpenses.count > recentExpenses.count {
+                                NavigationLink {
+                                    ExpenseListView(
+                                        expenses: displayedMonthExpenses,
+                                        title: "\(selectedFilter.navigationTitle) · \(monthContextTitle)"
+                                    )
+                                } label: {
+                                    HomeSectionLinkLabel(
+                                        title: "전체보기",
+                                        detail: "\(displayedMonthExpenses.count)건"
+                                    )
                                 }
-                                .padding(.bottom, 24)
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    ) {
+                        if recentExpenses.isEmpty {
+                            EmptyExpenseStateView(
+                                title: "최근 지출이 없습니다",
+                                detail: "\(monthContextTitle)에 등록된 내역이 아직 없습니다."
+                            )
+                        } else {
+                            VStack(alignment: .leading, spacing: 18) {
+                                ForEach(recentExpenseSections) { section in
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Text(section.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(PocketSyncTheme.secondaryText)
+
+                                        ExpenseFeedSectionCard(items: section.items) { expense in
+                                            selectedExpense = expense
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     .padding(.horizontal, 20)
 
-                    Group {
-                        if selectedDateExpenses.count > previewExpenses.count {
-                            NavigationLink {
-                                ExpenseListView(
-                                    expenses: selectedDateExpenses,
-                                    title: "\(selectedFilter.navigationTitle) · \(selectedDateTitle)"
-                                )
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Text("전체 내역 보기")
-                                        .font(.body.weight(.semibold))
-                                    Spacer()
-                                    Text("\(selectedDateExpenses.count)개")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(PocketSyncTheme.secondaryText)
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.bold))
-                                        .foregroundStyle(PocketSyncTheme.secondaryText)
+                    HomeSectionCard(title: "\(monthContextTitle) 요약") {
+                        if monthlyCategorySummaries.isEmpty {
+                            EmptyExpenseStateView(
+                                title: "요약할 지출이 없습니다",
+                                detail: "지출을 등록하면 카테고리별 합계가 여기에 표시됩니다."
+                            )
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(monthlyCategorySummaries.prefix(4).enumerated()), id: \.element.categoryTitle) { index, summary in
+                                    MonthlySummaryRow(summary: summary)
+
+                                    if index < min(monthlyCategorySummaries.count, 4) - 1 {
+                                        Divider()
+                                            .overlay(PocketSyncTheme.line.opacity(0.10))
+                                    }
                                 }
-                                .foregroundStyle(PocketSyncTheme.ink)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(PocketSyncTheme.panel)
-                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
-                                }
-                                .shadow(color: PocketSyncTheme.shadow.opacity(0.05), radius: 10, y: 6)
                             }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 20)
+                            .background(PocketSyncTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+                            }
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 28)
                 }
             }
             .background(PocketSyncTheme.screenBackground.ignoresSafeArea())
-            .navigationTitle("최근 지출")
+            .navigationTitle("홈")
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $isMonthPickerPresented) {
                 MonthPickerSheet(
@@ -295,25 +338,156 @@ struct HomeDashboardView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
+            .sheet(item: $selectedExpense) { expense in
+                if let editableExpense = householdStore.expense(for: expense.id) {
+                    EditExpenseView(expense: editableExpense)
+                }
+            }
         }
     }
 }
 
+private struct MonthlyCategorySummary {
+    let categoryTitle: String
+    let amount: Int
+    let count: Int
+}
+
+private struct MonthSpendCard: View {
+    let title: String
+    let amountText: String
+    let countText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+
+            Text(amountText)
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(PocketSyncTheme.ink)
+
+            Text(countText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PocketSyncTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(PocketSyncTheme.line.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: PocketSyncTheme.shadow.opacity(0.05), radius: 12, y: 6)
+    }
+}
+
+private struct HomeSectionCard<Content: View, Trailing: View>: View {
+    let title: String
+    @ViewBuilder var trailing: Trailing
+    @ViewBuilder var content: Content
+
+    init(
+        title: String,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() },
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.trailing = trailing()
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.ink)
+
+                Spacer()
+
+                trailing
+            }
+
+            content
+        }
+    }
+}
+
+private struct HomeSectionLinkLabel: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+            Text(detail)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(PocketSyncTheme.secondaryText)
+        }
+        .foregroundStyle(PocketSyncTheme.ink)
+    }
+}
+
+private struct MonthlySummaryRow: View {
+    let summary: MonthlyCategorySummary
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Circle()
+                .fill(PocketSyncTheme.accent.opacity(0.14))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: "won.sign.circle.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(PocketSyncTheme.accent)
+                }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(summary.categoryTitle)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(PocketSyncTheme.ink)
+
+                Text("\(summary.count)건")
+                    .font(.footnote)
+                    .foregroundStyle(PocketSyncTheme.secondaryText)
+            }
+
+            Spacer()
+
+            Text(summary.amount.currency)
+                .font(.body.weight(.bold))
+                .foregroundStyle(PocketSyncTheme.ink)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 15)
+    }
+}
+
 private struct EmptyExpenseStateView: View {
-    let filterTitle: String
+    let title: String
+    let detail: String
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             Image(systemName: "tray")
                 .font(.title2)
                 .foregroundStyle(PocketSyncTheme.secondaryText)
-            Text("\(filterTitle) 지출이 없습니다")
+            Text(title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(PocketSyncTheme.ink)
-            Text("이 조건에 맞는 지출이 아직 없습니다.")
+            Text(detail)
                 .font(.footnote)
                 .foregroundStyle(PocketSyncTheme.secondaryText)
-        }
+                .multilineTextAlignment(.center)
+            }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
         .background(PocketSyncTheme.card)

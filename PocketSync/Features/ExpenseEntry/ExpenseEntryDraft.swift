@@ -12,6 +12,7 @@ struct ExpenseEntryDraft {
     var selectedWalletID: UUID?
     var selectedCategory: ExpenseCategory?
     var memo: String = ""
+    var spentAt: Date = .now
 
     var amount: Int {
         Int(rawAmount) ?? 0
@@ -37,5 +38,6 @@ struct ExpenseEntryDraft {
         selectedWalletID = defaultWalletID
         selectedCategory = nil
         memo = ""
+        spentAt = .now
     }
 }
